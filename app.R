@@ -63,6 +63,9 @@ ui <- fluidPage(
       h4("Simulation results - value of investment at the end of horizon"),
       tableOutput("sim_result"),
       
+      h4("Yearly accumulation"),
+      tableOutput("sim_table"),
+      
       h4("Distribution of outcomes"),
       plotOutput("simulation_outcomes"),
       
@@ -102,6 +105,7 @@ server <- function(input, output) {
       set.seed(seed_value())
     } 
     
+    ## Return a nyear x nsim matrix
     res_matrix <- normSim(input$mupct / 100, input$sdpct / 100, input$nyear, input$nsim)
     
   })
@@ -111,8 +115,9 @@ server <- function(input, output) {
   })
   
   sim_table <- reactive({
+    ## Cumulative return over time
     M <- resM()
-    cumM <- apply(M, 2, cumprod)
+    cumM <- apply(M, 2, cumprod) * init_investment()
     dt <- data.table(cumM)
     
   })
@@ -122,8 +127,19 @@ server <- function(input, output) {
     quantile_dt <- data.table(Quantile = q, Value = quantile(res(), q))
   })
   
+  
   output$sim_table <- renderTable({
-    sim_table()
+    dt <- sim_table()
+    nyear <- dim(dt)[1]
+    Mquant <- apply(dt, 1, quantile, probs=c(0.2, 0.5, 0.8))
+    dt <- data.table(
+      t(Mquant)
+    )
+    
+    dt <- cbind(1:nyear, dt)
+    setnames(dt, "V1", "Year")
+    
+    return(dt)
   })
   
   output$plot_sims <- renderPlot({
