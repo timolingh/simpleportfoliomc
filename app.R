@@ -47,6 +47,7 @@ ui <- fluidPage(
   sidebarLayout(
     sidebarPanel(
       p("Model inputs"),
+      checkboxInput("useSeed", "Use seed", value=TRUE),
       numericInput("seed_value", "Seed value:", 8888),
       numericInput("initial_investment", "Initial investment:", 1000),
       numericInput("nsim", "Number of simulations to run:", 500),
@@ -97,7 +98,10 @@ server <- function(input, output) {
   })
   
   resM <- eventReactive(input$goButton, {
-    set.seed(seed_value())
+    if (input$useSeed) {
+      set.seed(seed_value())
+    } 
+    
     res_matrix <- normSim(input$mupct / 100, input$sdpct / 100, input$nyear, input$nsim)
     
   })
