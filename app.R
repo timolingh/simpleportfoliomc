@@ -146,7 +146,7 @@ server <- function(input, output) {
     dt <- sim_table()
     dt[, yr := 1:nyear()]
     dt_long <- melt(dt, id.vars = "yr", variable.name = "sim_id", value.name = "cum_return")
-    dt_long[, portfolio_value := cum_return * init_investment()]
+    dt_long[, portfolio_value := cum_return]
     pl <- ggplot(dt_long) + geom_line(aes(as.factor(yr), portfolio_value, group=sim_id, color=sim_id)) +
       xlab("Year") + ylab("Portfolio value") + scale_y_continuous(label=dollar_format()) +
       guides(color=F)
