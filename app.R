@@ -5,7 +5,7 @@ library(DT)
 library(scales)
 
 ## Simulation functions
-normSim <- function(mu, s, nyear, nsim) {
+normSim <- function(mu, s, nyear, nsim, wd=0) {
   
   ## The size of the matrix
   N = nyear * nsim
@@ -14,7 +14,7 @@ normSim <- function(mu, s, nyear, nsim) {
   r = rnorm(n=N, mean=mu, sd=s)
   
   ## organize as a nyear x nsim matrix
-  R <- matrix((1 + r), nrow=nyear)
+  R <- matrix((1 + r - wd), nrow=nyear)
   
   ## The cumulative returns over the specified horizon
   #returns <- apply(R, 2, prod)
@@ -47,34 +47,42 @@ ui <- fluidPage(
   sidebarLayout(
     sidebarPanel(
       p("Model inputs"),
-      checkboxInput("useSeed", "Use seed", value=TRUE),
+      checkboxInput("useSeed", "Use seed", value = TRUE),
       numericInput("seed_value", "Seed value:", 8888),
       numericInput("initial_investment", "Initial investment:", 1000),
       numericInput("nsim", "Number of simulations to run:", 500),
       numericInput("nyear", "Investment horizon in years:", 20),
       numericInput("mupct", "Expected return (%):", 5),
       numericInput("sdpct", "Portfolio std. dev. (%):", 20),
+      numericInput("wd", "Withdrawal percent (%):", 0),
       br(),
       actionButton("goButton", "Submit"),
       p("Click button to start simulation")
     ),
     
     mainPanel(
-      h4("Simulation results - value of investment at the end of horizon"),
-      tableOutput("sim_result"),
-      
-      h4("Yearly accumulation"),
-      tableOutput("sim_table"),
-      
-      h4("Distribution of outcomes"),
-      plotOutput("simulation_outcomes"),
-      
-      h4("Simulation traces - growth of investment over time"),
-      plotOutput("plot_sims")
-      
+      tabsetPanel(
+        tabPanel("Summary",
+                 h4("Simulation results - value of investment at the end of horizon"),
+                 p("Put some expository information here"),
+                 tableOutput("sim_result"),
+                 
+                 h4("Distribution of outcomes"),
+                 plotOutput("simulation_outcomes"),
+                 
+                 h4("Simulation traces - growth of investment over time"),
+                 plotOutput("plot_sims")
+        ),
+        
+        tabPanel("Yearly Accumulation",
+                 h4("Yearly accumulation"),
+                 tableOutput("sim_table")
+        )
+      )
     )
   )
 )
+
 
 server <- function(input, output) {
   
@@ -106,7 +114,7 @@ server <- function(input, output) {
     } 
     
     ## Return a nyear x nsim matrix
-    res_matrix <- normSim(input$mupct / 100, input$sdpct / 100, input$nyear, input$nsim)
+    res_matrix <- normSim(input$mupct / 100., input$sdpct / 100., input$nyear, input$nsim, input$wd / 100.)
     
   })
   
@@ -124,7 +132,8 @@ server <- function(input, output) {
   
   output$sim_result <- renderTable({
     q <- c(0.2, 0.5, 0.8)
-    quantile_dt <- data.table(Quantile = q, Value = quantile(res(), q))
+    vals <- quantile(res(), q)
+    quantile_dt <- data.table(Quantile = q, Value = dollar(round(vals)))
   })
   
   
@@ -138,6 +147,9 @@ server <- function(input, output) {
     
     dt <- cbind(1:nyear, dt)
     setnames(dt, "V1", "Year")
+    
+    # Format all numeric columns except Year
+    dt[, (2:ncol(dt)) := lapply(.SD, function(x) dollar(round(x))), .SDcols = 2:ncol(dt)]
     
     return(dt)
   })
