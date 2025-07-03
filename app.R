@@ -49,8 +49,8 @@ ui <- fluidPage(
       p("Model inputs"),
       checkboxInput("useSeed", "Use seed", value = TRUE),
       numericInput("seed_value", "Seed value:", 8888),
-      numericInput("initial_investment", "Initial investment:", 1000),
-      numericInput("nsim", "Number of simulations to run:", 500),
+      numericInput("initial_investment", "Initial investment:", 100000),
+      numericInput("nsim", "Number of simulations to run:", 5000),
       numericInput("nyear", "Investment horizon in years:", 20),
       numericInput("mupct", "Expected return (%):", 5),
       numericInput("sdpct", "Portfolio std. dev. (%):", 20),
@@ -63,19 +63,35 @@ ui <- fluidPage(
     mainPanel(
       tabsetPanel(
         tabPanel("Summary",
+                 h4("Description"),
+                 p("This program performs a Monte Carlo simulation of growth in
+                   a hypothetical portfolio over a specified time horizon.
+                   The user sets capital market assumptions and simulation parameters 
+                   on the left and the program outputs probable (20th, 50th, 80th percentile) 
+                   ending portfolio values."),
+                 tags$hr(),
                  h4("Simulation results - value of investment at the end of horizon"),
-                 p("Put some expository information here"),
+                 p("Based on the portfolio capital market assumptions multiple simulations are
+                   run.  The ending portfolio values for the 20th, 50th, and 80th percentile of all
+                   the simulation results are shown below."),
                  tableOutput("sim_result"),
                  
+                 tags$hr(),
                  h4("Distribution of outcomes"),
+                 p("Distribution of all possible ending portfolio values. The dashed lines indicate
+                   the 20th, 50th, and 80th percentiles"),
                  plotOutput("simulation_outcomes"),
                  
+                 tags$hr(),
                  h4("Simulation traces - growth of investment over time"),
+                 p("The portfolio value at the end of each year.  Every simulation is plotted.
+                   The dashed line represents the initial investment"),
                  plotOutput("plot_sims")
         ),
         
         tabPanel("Yearly Accumulation",
                  h4("Yearly accumulation"),
+                 p("Ending balance for each year. Given for 20th, 50th, 80th percentile."),
                  tableOutput("sim_table")
         )
       )
@@ -160,6 +176,7 @@ server <- function(input, output) {
     dt_long <- melt(dt, id.vars = "yr", variable.name = "sim_id", value.name = "cum_return")
     dt_long[, portfolio_value := cum_return]
     pl <- ggplot(dt_long) + geom_line(aes(as.factor(yr), portfolio_value, group=sim_id, color=sim_id)) +
+      geom_hline(yintercept=init_investment(), linetype="dashed") +
       xlab("Year") + ylab("Portfolio value") + scale_y_continuous(label=dollar_format()) +
       guides(color=F)
     pl
@@ -171,8 +188,16 @@ server <- function(input, output) {
     ending_value <- res()
     dt <- data.table(sim_index, ending_value)
     
+    ending_value <- dt[, ending_value]
+    q <- c(0.2, 0.5, 0.8)
+    vals <- quantile(ending_value, q)
+    
     pl <- ggplot(dt) + stat_density(aes(x=ending_value), color="blue", geom="line") +
-      xlab("Ending value") + ylab("Density") + scale_x_continuous(label=dollar_format())
+      geom_vline(xintercept=vals[1], linetype="dashed") + 
+      geom_vline(xintercept=vals[2], linetype="dashed") +
+      geom_vline(xintercept=vals[3], linetype="dashed") +
+      xlab("Ending value") + ylab("Density") + scale_x_continuous(label=dollar_format()) +
+      scale_y_continuous(labels = NULL, breaks = NULL)
     pl
     
   })
