@@ -5,7 +5,7 @@ library(DT)
 library(scales)
 
 ## Simulation functions
-normSim <- function(mu, s, nyear, nsim) {
+normSim <- function(mu, s, nyear, nsim, wd=0) {
   
   ## The size of the matrix
   N = nyear * nsim
@@ -14,7 +14,7 @@ normSim <- function(mu, s, nyear, nsim) {
   r = rnorm(n=N, mean=mu, sd=s)
   
   ## organize as a nyear x nsim matrix
-  R <- matrix((1 + r), nrow=nyear)
+  R <- matrix((1 + r - wd), nrow=nyear)
   
   ## The cumulative returns over the specified horizon
   #returns <- apply(R, 2, prod)
@@ -47,34 +47,58 @@ ui <- fluidPage(
   sidebarLayout(
     sidebarPanel(
       p("Model inputs"),
-      checkboxInput("useSeed", "Use seed", value=TRUE),
+      checkboxInput("useSeed", "Use seed", value = TRUE),
       numericInput("seed_value", "Seed value:", 8888),
-      numericInput("initial_investment", "Initial investment:", 1000),
-      numericInput("nsim", "Number of simulations to run:", 500),
+      numericInput("initial_investment", "Initial investment:", 100000),
+      numericInput("nsim", "Number of simulations to run:", 5000),
       numericInput("nyear", "Investment horizon in years:", 20),
       numericInput("mupct", "Expected return (%):", 5),
       numericInput("sdpct", "Portfolio std. dev. (%):", 20),
+      numericInput("wd", "Withdrawal percent (%):", 0),
       br(),
       actionButton("goButton", "Submit"),
       p("Click button to start simulation")
     ),
     
     mainPanel(
-      h4("Simulation results - value of investment at the end of horizon"),
-      tableOutput("sim_result"),
-      
-      h4("Yearly accumulation"),
-      tableOutput("sim_table"),
-      
-      h4("Distribution of outcomes"),
-      plotOutput("simulation_outcomes"),
-      
-      h4("Simulation traces - growth of investment over time"),
-      plotOutput("plot_sims")
-      
+      tabsetPanel(
+        tabPanel("Summary",
+                 h4("Description"),
+                 p("This program performs a Monte Carlo simulation of growth in
+                   a hypothetical portfolio over a specified time horizon.
+                   The user sets capital market assumptions and simulation parameters 
+                   on the left and the program outputs probable (20th, 50th, 80th percentile) 
+                   ending portfolio values."),
+                 tags$hr(),
+                 h4("Simulation results - value of investment at the end of horizon"),
+                 p("Based on the portfolio capital market assumptions multiple simulations are
+                   run.  The ending portfolio values for the 20th, 50th, and 80th percentile of all
+                   the simulation results are shown below."),
+                 tableOutput("sim_result"),
+                 
+                 tags$hr(),
+                 h4("Distribution of outcomes"),
+                 p("Distribution of all possible ending portfolio values. The dashed lines indicate
+                   the 20th, 50th, and 80th percentiles"),
+                 plotOutput("simulation_outcomes"),
+                 
+                 tags$hr(),
+                 h4("Simulation traces - growth of investment over time"),
+                 p("The portfolio value at the end of each year.  Every simulation is plotted.
+                   The dashed line represents the initial investment"),
+                 plotOutput("plot_sims")
+        ),
+        
+        tabPanel("Yearly Accumulation",
+                 h4("Yearly accumulation"),
+                 p("Ending balance for each year. Given for 20th, 50th, 80th percentile."),
+                 tableOutput("sim_table")
+        )
+      )
     )
   )
 )
+
 
 server <- function(input, output) {
   
@@ -106,7 +130,7 @@ server <- function(input, output) {
     } 
     
     ## Return a nyear x nsim matrix
-    res_matrix <- normSim(input$mupct / 100, input$sdpct / 100, input$nyear, input$nsim)
+    res_matrix <- normSim(input$mupct / 100., input$sdpct / 100., input$nyear, input$nsim, input$wd / 100.)
     
   })
   
@@ -124,7 +148,8 @@ server <- function(input, output) {
   
   output$sim_result <- renderTable({
     q <- c(0.2, 0.5, 0.8)
-    quantile_dt <- data.table(Quantile = q, Value = quantile(res(), q))
+    vals <- quantile(res(), q)
+    quantile_dt <- data.table(Quantile = q, Value = dollar(round(vals)))
   })
   
   
@@ -139,6 +164,9 @@ server <- function(input, output) {
     dt <- cbind(1:nyear, dt)
     setnames(dt, "V1", "Year")
     
+    # Format all numeric columns except Year
+    dt[, (2:ncol(dt)) := lapply(.SD, function(x) dollar(round(x))), .SDcols = 2:ncol(dt)]
+    
     return(dt)
   })
   
@@ -148,6 +176,7 @@ server <- function(input, output) {
     dt_long <- melt(dt, id.vars = "yr", variable.name = "sim_id", value.name = "cum_return")
     dt_long[, portfolio_value := cum_return]
     pl <- ggplot(dt_long) + geom_line(aes(as.factor(yr), portfolio_value, group=sim_id, color=sim_id)) +
+      geom_hline(yintercept=init_investment(), linetype="dashed") +
       xlab("Year") + ylab("Portfolio value") + scale_y_continuous(label=dollar_format()) +
       guides(color=F)
     pl
@@ -159,8 +188,16 @@ server <- function(input, output) {
     ending_value <- res()
     dt <- data.table(sim_index, ending_value)
     
+    ending_value <- dt[, ending_value]
+    q <- c(0.2, 0.5, 0.8)
+    vals <- quantile(ending_value, q)
+    
     pl <- ggplot(dt) + stat_density(aes(x=ending_value), color="blue", geom="line") +
-      xlab("Ending value") + ylab("Density") + scale_x_continuous(label=dollar_format())
+      geom_vline(xintercept=vals[1], linetype="dashed") + 
+      geom_vline(xintercept=vals[2], linetype="dashed") +
+      geom_vline(xintercept=vals[3], linetype="dashed") +
+      xlab("Ending value") + ylab("Density") + scale_x_continuous(label=dollar_format()) +
+      scale_y_continuous(labels = NULL, breaks = NULL)
     pl
     
   })
